@@ -13,7 +13,18 @@ Eine umfassende Webanwendung zur Verwaltung und Anzeige von Band-Zeitplänen fü
 - **Veranstaltungspasswort**: Anonymer Zugang zur Bühnenanzeige für Gäste
 - **Responsive Design**: Funktioniert auf Smartphones, Tablets und Desktop-Displays
 
-### Neue Features (v2.1)
+### Features (v2.3)
+- **Automatische Ersteinrichtung**: Setup-Seite erscheint beim ersten Start zur Admin-Account-Erstellung
+- **Automatischer SECRET_KEY**: Session-Key wird generiert und persistent gespeichert — keine manuelle Konfiguration nötig
+- **Docker Named Volumes**: Zuverlässige Datenpersistenz ohne Berechtigungsprobleme
+- **Zentrales Datenverzeichnis**: Datenbank, Uploads und Session-Key im `data/`-Verzeichnis
+
+### Features (v2.2)
+- **Passwort-Verwaltung**: Benutzer können ihr Passwort selbst ändern
+- **Admin Passwort-Reset**: Admins können Passwörter anderer Benutzer zurücksetzen
+- **Nachrichten-Vorschau**: Gesendete Nachrichten werden in der Display-Vorschau angezeigt
+
+### Features (v2.1)
 - **Rollenbasiertes Berechtigungssystem** mit 5 Rollen:
   - `ViewerStage` - Nur Bühnenanzeige
   - `ViewerBackstage` - Nur Backstage-Anzeige
