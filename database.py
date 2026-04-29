@@ -190,6 +190,13 @@ def delete_all_bands():
         cursor.execute('DELETE FROM bands')
 
 
+def import_bands_from_list(bands):
+    """Ersetzt den kompletten Schedule durch die übergebene Liste"""
+    delete_all_bands()
+    for b in bands:
+        add_band(b['date'], b['band'], b['start'], b['end'], b['duration'], b['end_date'])
+
+
 # ==================== HISTORY ====================
 
 def add_to_history(band_name, scheduled_date, scheduled_start, scheduled_end,

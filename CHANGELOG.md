@@ -2,6 +2,12 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [2.3.5] - 2026-04-29
+
+### Behoben
+- **CSV-Upload**: Fehlende Datenbankfunktion `import_bands_from_list` ergänzt
+- **CSV-Encoding**: Automatischer Fallback auf Latin-1/CP1252 wenn CSV nicht UTF-8 kodiert ist (z.B. aus Excel)
+
 ## [2.3.4] - 2026-04-29
 
 ### Hinzugefügt

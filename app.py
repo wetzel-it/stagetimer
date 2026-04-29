@@ -1221,8 +1221,16 @@ def upload_csv():
         return jsonify({"success": False, "message": "Nur CSV-Dateien erlaubt"}), 400
 
     try:
-        # Lese die CSV-Datei direkt aus dem Upload
-        df = pd.read_csv(file)
+        # Lese die CSV-Datei - versuche UTF-8, dann Latin-1 als Fallback
+        raw = file.read()
+        for encoding in ('utf-8-sig', 'utf-8', 'latin-1', 'cp1252'):
+            try:
+                df = pd.read_csv(io.BytesIO(raw), encoding=encoding)
+                break
+            except UnicodeDecodeError:
+                continue
+        else:
+            return jsonify({"success": False, "message": "CSV-Datei konnte nicht gelesen werden. Bitte als UTF-8 speichern."}), 400
 
         # Validiere die Spalten
         required_columns = ['date', 'band', 'start', 'end']

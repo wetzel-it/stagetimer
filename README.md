@@ -292,7 +292,7 @@ stagetimer/
 
 Die vollständige Versionshistorie findest du in der [CHANGELOG.md](CHANGELOG.md).
 
-**Aktuelle Version:** 2.3.4
+**Aktuelle Version:** 2.3.5
 
 ## Lizenz
 
