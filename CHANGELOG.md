@@ -2,6 +2,12 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [2.3.8] - 2026-04-29
+
+### Behoben
+- **Umlaut-Fehler im Rollen-Modal**: "für", "Bühnenanzeige", "Eingeschränkter", "ermöglicht", "Gästen" korrigiert
+- **Logo-Pfad auf Login-Seite**: Logo wurde über falschen Pfad (`/static/uploads/`) geladen, korrigiert auf `/uploads/`
+
 ## [2.3.7] - 2026-04-29
 
 ### Geändert

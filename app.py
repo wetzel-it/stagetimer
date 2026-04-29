@@ -1169,10 +1169,9 @@ def download_example_csv():
     day_after_str = day_after.isoformat()
 
     # Erstelle Beispiel-CSV-Daten (immer ab morgen)
-    example_data = f"""# HINWEIS: Acts die um oder nach Mitternacht (00:00-02:00) beginnen, muessen mit dem naechsten Kalenderdatum eingetragen werden!
-# Beispiel: Act startet am {tomorrow_str} um 23:45 und endet um 01:00 → Endzeit gehoert zum {day_after_str}, wird automatisch erkannt.
-# Beispiel: Act startet am {day_after_str} um 00:30 → Datum {day_after_str} eintragen, NICHT {tomorrow_str}!
-date,band,start,end
+    example_data = f"""# HINWEIS: Acts die um oder nach Mitternacht (00:00) beginnen, müssen mit dem nächsten Kalenderdatum eingetragen werden!
+# Beispiel: Act startet am {tomorrow_str} um 23:45 und endet um 01:00 / Endzeit gehört zum {day_after_str}, wird automatisch erkannt. Keine Anpassung nötig!
+# Beispiel: Act startet am {day_after_str} um 00:30 / Datum {day_after_str} eintragen, NICHT {tomorrow_str}! Da die Band nach/um Mitternacht beginnt, gehört sie zum nächsten Tag.
 {tomorrow_str},Band 1,18:00,19:00
 {tomorrow_str},Band 2,19:30,21:00
 {tomorrow_str},Band 3,21:30,23:30
