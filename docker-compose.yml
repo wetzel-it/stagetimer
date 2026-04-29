@@ -1,0 +1,22 @@
+# StageTimer - Docker Compose
+# Erster Start: Browser oeffnen -> Setup-Seite erscheint -> Admin erstellen
+
+services:
+  stagetimer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stagetimer
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      # Persistente Daten (benannte Volumes)
+      - stagetimer_data:/app/data
+    environment:
+      - TZ=Europe/Berlin
+      - FLASK_ENV=production
+      - LOG_LEVEL=ERROR
+
+volumes:
+  stagetimer_data:

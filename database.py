@@ -1,0 +1,613 @@
+"""
+Datenbank-Management für StageTimer
+SQLite-basierte Persistenz für Bands, Historie, Benutzer, Logos und Einstellungen
+"""
+
+import os
+import sqlite3
+from datetime import datetime
+from contextlib import contextmanager
+import logging
+from werkzeug.security import generate_password_hash, check_password_hash
+
+logger = logging.getLogger(__name__)
+
+# Daten-Verzeichnis (fuer Docker-Volume)
+DATA_DIR = os.environ.get('STAGETIMER_DATA_DIR', 'data')
+os.makedirs(DATA_DIR, exist_ok=True)
+
+DB_FILE = os.path.join(DATA_DIR, 'stagetimer.db')
+
+
+@contextmanager
+def get_db():
+    """Context Manager für Datenbankverbindungen"""
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row  # Ermöglicht dict-ähnlichen Zugriff
+    try:
+        yield conn
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Database error: {e}")
+        raise
+    finally:
+        conn.close()
+
+
+def init_database():
+    """Initialisiert die Datenbank mit allen Tabellen"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        # Tabelle: bands (aktueller Schedule)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS bands (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                band_name TEXT NOT NULL,
+                start_time TEXT NOT NULL,
+                end_time TEXT NOT NULL,
+                duration INTEGER NOT NULL,
+                end_date TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Tabelle: history (gespielte Bands)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                band_name TEXT NOT NULL,
+                scheduled_date TEXT NOT NULL,
+                scheduled_start TEXT NOT NULL,
+                scheduled_end TEXT NOT NULL,
+                actual_start DATETIME NOT NULL,
+                actual_end DATETIME,
+                duration INTEGER,
+                hidden INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Index für schnellere Historie-Abfragen
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_history_hidden
+            ON history(hidden, created_at DESC)
+        ''')
+
+        # Tabelle: users (Benutzer)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Tabelle: band_logos (Logo-Zuordnungen)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS band_logos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                band_name TEXT UNIQUE NOT NULL,
+                logo_filename TEXT NOT NULL,
+                uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Tabelle: settings (Key-Value Store)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Tabelle: roles (Rollen-Definition)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS roles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                description TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Tabelle: user_roles (Benutzer-Rollen-Verknüpfung)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_roles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                role_id INTEGER NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+                UNIQUE(user_id, role_id)
+            )
+        ''')
+
+        # Index für schnellere Rollen-Abfragen
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_user_roles_user_id
+            ON user_roles(user_id)
+        ''')
+
+        logger.info("Database initialized successfully")
+
+    # Initialisiere Standard-Rollen
+    init_roles()
+
+
+# ==================== BANDS (Schedule) ====================
+
+def get_all_bands():
+    """Gibt alle Bands aus dem Schedule zurück, sortiert nach Datum und Zeit"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, date, band_name, start_time, end_time, duration, end_date
+            FROM bands
+            ORDER BY date, start_time
+        ''')
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def add_band(date, band_name, start_time, end_time, duration, end_date):
+    """Fügt eine neue Band zum Schedule hinzu"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO bands (date, band_name, start_time, end_time, duration, end_date)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (date, band_name, start_time, end_time, duration, end_date))
+        return cursor.lastrowid
+
+
+def update_band(band_id, date, band_name, start_time, end_time, duration, end_date):
+    """Aktualisiert eine bestehende Band"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE bands
+            SET date = ?, band_name = ?, start_time = ?, end_time = ?, duration = ?, end_date = ?
+            WHERE id = ?
+        ''', (date, band_name, start_time, end_time, duration, end_date, band_id))
+
+
+def delete_band(band_id):
+    """Löscht eine Band aus dem Schedule"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM bands WHERE id = ?', (band_id,))
+
+
+def delete_all_bands():
+    """Löscht alle Bands aus dem Schedule"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM bands')
+
+
+# ==================== HISTORY ====================
+
+def add_to_history(band_name, scheduled_date, scheduled_start, scheduled_end,
+                   actual_start, actual_end=None, duration=None):
+    """Fügt einen Band-Auftritt zur Historie hinzu"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO history
+            (band_name, scheduled_date, scheduled_start, scheduled_end,
+             actual_start, actual_end, duration, hidden)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+        ''', (band_name, scheduled_date, scheduled_start, scheduled_end,
+              actual_start, actual_end, duration))
+        return cursor.lastrowid
+
+
+def get_visible_history(limit=50):
+    """Gibt sichtbare Historie-Einträge zurück (hidden=0)"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, band_name, scheduled_date, scheduled_start, scheduled_end,
+                   actual_start, actual_end, duration, created_at
+            FROM history
+            WHERE hidden = 0
+            ORDER BY created_at DESC
+            LIMIT ?
+        ''', (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_all_history(limit=100):
+    """Gibt alle Historie-Einträge zurück (auch versteckte)"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, band_name, scheduled_date, scheduled_start, scheduled_end,
+                   actual_start, actual_end, duration, hidden, created_at
+            FROM history
+            ORDER BY created_at DESC
+            LIMIT ?
+        ''', (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def hide_history_entry(history_id):
+    """Versteckt einen Historie-Eintrag (soft delete)"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('UPDATE history SET hidden = 1 WHERE id = ?', (history_id,))
+
+
+def hide_all_history():
+    """Versteckt alle Historie-Einträge (soft delete)"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('UPDATE history SET hidden = 1 WHERE hidden = 0')
+
+
+def unhide_history_entry(history_id):
+    """Macht einen Historie-Eintrag wieder sichtbar"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('UPDATE history SET hidden = 0 WHERE id = ?', (history_id,))
+
+
+def delete_history_entry_permanently(history_id):
+    """Löscht einen Historie-Eintrag permanent (nur für Admin)"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM history WHERE id = ?', (history_id,))
+
+
+# ==================== USERS ====================
+
+def get_all_users():
+    """Gibt alle Benutzer zurück"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, username FROM users ORDER BY username')
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def needs_setup():
+    """Prüft ob die initiale Einrichtung erforderlich ist (keine User vorhanden)"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) as count FROM users')
+        return cursor.fetchone()['count'] == 0
+
+
+def get_user(username):
+    """Gibt einen spezifischen Benutzer zurück"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, username, password_hash FROM users WHERE username = ?',
+                      (username,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def add_user(username, password_hash):
+    """Fügt einen neuen Benutzer hinzu"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)',
+                      (username, password_hash))
+        return cursor.lastrowid
+
+
+def delete_user(username):
+    """Löscht einen Benutzer (und seine Rollen durch CASCADE)"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM users WHERE username = ?', (username,))
+
+
+def update_user_password(username, new_password_hash):
+    """Aktualisiert das Passwort eines Benutzers"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('UPDATE users SET password_hash = ? WHERE username = ?',
+                      (new_password_hash, username))
+        return cursor.rowcount > 0
+
+
+def get_user_by_id(user_id):
+    """Gibt einen Benutzer anhand der ID zurück"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, username, password_hash FROM users WHERE id = ?',
+                      (user_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+# ==================== ROLES ====================
+
+def init_roles():
+    """Initialisiert die Standard-Rollen (falls nicht vorhanden)"""
+    default_roles = [
+        ('ViewerStage', 'Zugriff nur auf Bühnenanzeige (index.html)'),
+        ('ViewerBackstage', 'Zugriff nur auf Backstage-Anzeige (backstage.html)'),
+        ('ViewerTimetable', 'Zugriff nur auf Zeitplan-Anzeige (timetable.html)'),
+        ('Stagemanager', 'Eingeschränkter Admin-Zugriff mit allen Viewer-Rechten'),
+        ('Admin', 'Vollzugriff auf alle Funktionen'),
+    ]
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        for name, description in default_roles:
+            cursor.execute('''
+                INSERT OR IGNORE INTO roles (name, description)
+                VALUES (?, ?)
+            ''', (name, description))
+        logger.info("Default roles initialized")
+
+
+def get_all_roles():
+    """Gibt alle verfügbaren Rollen zurück"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, name, description FROM roles ORDER BY id')
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_role_by_name(name):
+    """Gibt eine Rolle anhand des Namens zurück"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, name, description FROM roles WHERE name = ?', (name,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def get_user_roles(username):
+    """Gibt die Rollen eines Benutzers als Liste von Rollennamen zurück"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT r.name
+            FROM roles r
+            JOIN user_roles ur ON r.id = ur.role_id
+            JOIN users u ON u.id = ur.user_id
+            WHERE u.username = ?
+            ORDER BY r.id
+        ''', (username,))
+        return [row['name'] for row in cursor.fetchall()]
+
+
+def get_user_roles_by_id(user_id):
+    """Gibt die Rollen eines Benutzers anhand der User-ID zurück"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT r.name
+            FROM roles r
+            JOIN user_roles ur ON r.id = ur.role_id
+            WHERE ur.user_id = ?
+            ORDER BY r.id
+        ''', (user_id,))
+        return [row['name'] for row in cursor.fetchall()]
+
+
+def set_user_roles(user_id, role_names):
+    """Setzt die Rollen eines Benutzers (ersetzt alle bestehenden Rollen)"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        # Lösche alle bestehenden Rollen des Users
+        cursor.execute('DELETE FROM user_roles WHERE user_id = ?', (user_id,))
+
+        # Füge neue Rollen hinzu
+        for role_name in role_names:
+            cursor.execute('''
+                INSERT INTO user_roles (user_id, role_id)
+                SELECT ?, id FROM roles WHERE name = ?
+            ''', (user_id, role_name))
+
+        logger.info(f"Updated roles for user {user_id}: {role_names}")
+
+
+def add_role_to_user(user_id, role_name):
+    """Fügt eine Rolle zu einem Benutzer hinzu"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT OR IGNORE INTO user_roles (user_id, role_id)
+            SELECT ?, id FROM roles WHERE name = ?
+        ''', (user_id, role_name))
+        return cursor.rowcount > 0
+
+
+def remove_role_from_user(user_id, role_name):
+    """Entfernt eine Rolle von einem Benutzer"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            DELETE FROM user_roles
+            WHERE user_id = ? AND role_id = (SELECT id FROM roles WHERE name = ?)
+        ''', (user_id, role_name))
+        return cursor.rowcount > 0
+
+
+def user_has_role(username, role_name):
+    """Prüft ob ein Benutzer eine bestimmte Rolle hat"""
+    roles = get_user_roles(username)
+    return role_name in roles
+
+
+def user_has_any_role(username, role_names):
+    """Prüft ob ein Benutzer mindestens eine der angegebenen Rollen hat"""
+    user_roles = get_user_roles(username)
+    return any(role in user_roles for role in role_names)
+
+
+def get_users_with_roles():
+    """Gibt alle Benutzer mit ihren Rollen zurück"""
+    users = get_all_users()
+    for user in users:
+        user['roles'] = get_user_roles(user['username'])
+    return users
+
+
+def count_admins():
+    """Zählt die Anzahl der Benutzer mit Admin-Rolle"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT COUNT(DISTINCT ur.user_id) as count
+            FROM user_roles ur
+            JOIN roles r ON r.id = ur.role_id
+            WHERE r.name = 'Admin'
+        ''')
+        return cursor.fetchone()['count']
+
+
+def validate_role_combination(role_names):
+    """
+    Validiert ob eine Rollen-Kombination gültig ist.
+    Regeln:
+    - Viewer-Rollen (ViewerStage, ViewerBackstage, ViewerTimetable) können kombiniert werden
+    - Stagemanager und Admin sind exklusiv (keine anderen Rollen erlaubt)
+    """
+    viewer_roles = {'ViewerStage', 'ViewerBackstage', 'ViewerTimetable'}
+    exclusive_roles = {'Stagemanager', 'Admin'}
+
+    user_viewer_roles = set(role_names) & viewer_roles
+    user_exclusive_roles = set(role_names) & exclusive_roles
+
+    # Keine exklusiven Rollen -> nur Viewer-Rollen erlaubt
+    if not user_exclusive_roles:
+        return len(set(role_names) - viewer_roles) == 0
+
+    # Genau eine exklusive Rolle und keine anderen
+    if len(user_exclusive_roles) == 1 and len(role_names) == 1:
+        return True
+
+    # Mehr als eine exklusive Rolle oder Kombination mit anderen
+    return False
+
+
+# ==================== EVENT PASSWORD ====================
+
+def get_event_password_hash():
+    """Gibt den Hash des Veranstaltungspassworts zurück (oder None wenn nicht gesetzt)"""
+    value = get_setting('event_password_hash')
+    return value if value else None
+
+
+def set_event_password(password):
+    """Setzt das Veranstaltungspasswort (wird gehasht gespeichert)"""
+    if password:
+        password_hash = generate_password_hash(password)
+        set_setting('event_password_hash', password_hash)
+        logger.info("Event password has been set")
+    else:
+        clear_event_password()
+
+
+def clear_event_password():
+    """Löscht das Veranstaltungspasswort"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM settings WHERE key = 'event_password_hash'")
+        logger.info("Event password has been cleared")
+
+
+def verify_event_password(password):
+    """Prüft ob das angegebene Passwort mit dem Veranstaltungspasswort übereinstimmt"""
+    stored_hash = get_event_password_hash()
+    if not stored_hash:
+        return False
+    return check_password_hash(stored_hash, password)
+
+
+def is_event_password_enabled():
+    """Prüft ob ein Veranstaltungspasswort gesetzt ist"""
+    return get_event_password_hash() is not None
+
+
+# ==================== BAND LOGOS ====================
+
+def get_all_band_logos():
+    """Gibt alle Band-Logo-Zuordnungen zurück als Dictionary {band_name: filename}"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT band_name, logo_filename FROM band_logos')
+        return {row['band_name']: row['logo_filename'] for row in cursor.fetchall()}
+
+
+def get_band_logo(band_name):
+    """Gibt das Logo für eine bestimmte Band zurück"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT logo_filename FROM band_logos WHERE band_name = ?',
+                      (band_name,))
+        row = cursor.fetchone()
+        return row['logo_filename'] if row else None
+
+
+def set_band_logo(band_name, logo_filename):
+    """Setzt oder aktualisiert das Logo für eine Band"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO band_logos (band_name, logo_filename, uploaded_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(band_name) DO UPDATE SET
+                logo_filename = excluded.logo_filename,
+                uploaded_at = CURRENT_TIMESTAMP
+        ''', (band_name, logo_filename))
+
+
+def delete_band_logo(band_name):
+    """Löscht die Logo-Zuordnung für eine Band"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM band_logos WHERE band_name = ?', (band_name,))
+
+
+def rename_band_in_logos(old_name, new_name):
+    """Benennt eine Band in der Logo-Zuordnung um (für Smart Rename)"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE band_logos SET band_name = ? WHERE band_name = ?
+        ''', (new_name, old_name))
+
+
+# ==================== SETTINGS ====================
+
+def get_setting(key, default=None):
+    """Gibt einen Einstellungs-Wert zurück"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT value FROM settings WHERE key = ?', (key,))
+        row = cursor.fetchone()
+        return row['value'] if row else default
+
+
+def set_setting(key, value):
+    """Setzt oder aktualisiert eine Einstellung"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO settings (key, value, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = CURRENT_TIMESTAMP
+        ''', (key, value))
+
+
+def get_all_settings():
+    """Gibt alle Einstellungen als Dictionary zurück"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT key, value FROM settings')
+        return {row['key']: row['value'] for row in cursor.fetchall()}
