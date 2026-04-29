@@ -14,6 +14,7 @@ Eine umfassende Webanwendung zur Verwaltung und Anzeige von Band-Zeitplänen fü
 - **Responsive Design**: Funktioniert auf Smartphones, Tablets und Desktop-Displays
 
 ### Features (v2.3)
+- **Konfigurierbare Abschluss-Anzeige**: Überschrift und Nachricht für das Ende der Veranstaltung im Admin-Panel einstellbar
 - **Automatische Ersteinrichtung**: Setup-Seite erscheint beim ersten Start zur Admin-Account-Erstellung
 - **Automatischer SECRET_KEY**: Session-Key wird generiert und persistent gespeichert — keine manuelle Konfiguration nötig
 - **Docker Named Volumes**: Zuverlässige Datenpersistenz ohne Berechtigungsprobleme
@@ -268,7 +269,7 @@ stagetimer/
 
 Die vollständige Versionshistorie findest du in der [CHANGELOG.md](CHANGELOG.md).
 
-**Aktuelle Version:** 2.3.2
+**Aktuelle Version:** 2.3.3
 
 ## Lizenz
 

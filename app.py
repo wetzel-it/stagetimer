@@ -234,6 +234,12 @@ def get_warn_orange():
 def get_warn_red():
     return int(db.get_setting('warn_red', '1'))
 
+def get_end_title():
+    return db.get_setting('end_title', '')
+
+def get_end_message():
+    return db.get_setting('end_message', '')
+
 def get_band_logos():
     """Gibt alle Band-Logo-Zuordnungen zurück"""
     return db.get_all_band_logos()
@@ -657,14 +663,14 @@ def check_time_conflict(start_date, start_time, end_time, duration, end_date):
 def stage():
     if not current_user.can_access_stage():
         abort(403)
-    return render_template('index.html', logo=get_logo_filename(), logo_size_percent=get_logo_size_percent(), band_logos=get_band_logos())
+    return render_template('index.html', logo=get_logo_filename(), logo_size_percent=get_logo_size_percent(), band_logos=get_band_logos(), end_title=get_end_title(), end_message=get_end_message())
 
 @app.route('/backstage')
 @login_required
 def backstage():
     if not current_user.can_access_backstage():
         abort(403)
-    return render_template('backstage.html', logo=get_logo_filename(), logo_size_percent=get_logo_size_percent(), band_logos=get_band_logos())
+    return render_template('backstage.html', logo=get_logo_filename(), logo_size_percent=get_logo_size_percent(), band_logos=get_band_logos(), end_title=get_end_title(), end_message=get_end_message())
 
 @app.route('/timetable')
 @login_required
@@ -994,6 +1000,11 @@ def admin():
                 logger.info(f"Konfiguration aktualisiert: orange={warn_orange}, red={warn_red}")
             except ValueError:
                 return "Ungültige Warnzeit-Werte", 400
+        elif action == 'set_end_text':
+            if not is_full_admin:
+                abort(403)
+            db.set_setting('end_title', request.form.get('end_title', ''))
+            db.set_setting('end_message', request.form.get('end_message', ''))
         elif action == 'add_user':
             if not is_full_admin:
                 abort(403)
@@ -1151,6 +1162,8 @@ def admin():
         all_roles=all_roles,
         warn_orange=get_warn_orange(),
         warn_red=get_warn_red(),
+        end_title=get_end_title(),
+        end_message=get_end_message(),
         today=today,
         schedule_conflicts=schedule_conflicts,
         band_logos=get_band_logos(),

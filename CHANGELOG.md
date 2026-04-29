@@ -2,6 +2,13 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [2.3.3] - 2026-04-29
+
+### Hinzugefügt
+- **Konfigurierbare Abschluss-Anzeige**: Überschrift und Nachricht für das Ende der Veranstaltung im Admin-Panel einstellbar
+  - Wird auf Stage- und Backstage-Anzeige gezeigt wenn kein Programm mehr läuft
+  - Bleibt leer wenn nichts eingetragen ist
+
 ## [2.3.2] - 2026-04-29
 
 ### Geändert

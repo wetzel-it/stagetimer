@@ -848,11 +848,11 @@
       
       const title = document.createElement('div');
       title.className = 'feierabend-title';
-      title.textContent = 'Feierabend';
-      
+      title.textContent = '{{ end_title }}';
+
       const message = document.createElement('div');
       message.className = 'feierabend-message';
-      message.textContent = 'Danke an alle Beteiligten!';
+      message.textContent = '{{ end_message }}';
       
       container.appendChild(title);
       container.appendChild(message);
