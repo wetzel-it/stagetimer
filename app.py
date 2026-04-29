@@ -3,10 +3,11 @@ import threading
 import time
 import json
 import logging
+from functools import wraps
 import pandas as pd
 import io
 from datetime import datetime, timedelta, date
-from flask import Flask, render_template, request, redirect, url_for, send_from_directory, jsonify, send_file, Response
+from flask import Flask, render_template, request, redirect, url_for, send_from_directory, jsonify, send_file, Response, abort
 from flask_socketio import SocketIO, emit
 from flask_login import LoginManager, login_user, login_required, logout_user, UserMixin, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -29,10 +30,39 @@ logger.setLevel(logging.ERROR)
 # Werkzeug (Flask) Logger auch auf ERROR setzen
 logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
+
+# Daten-Verzeichnis (konsistent mit database.py)
+DATA_DIR = os.environ.get('STAGETIMER_DATA_DIR', 'data')
+os.makedirs(DATA_DIR, exist_ok=True)
+
+
+def get_or_create_secret_key():
+    """
+    Liest den SECRET_KEY aus .env, oder aus Datei im Data-Verzeichnis,
+    oder generiert einen neuen und speichert ihn persistent.
+    """
+    # 1. Prüfe .env Variable (hat Priorität)
+    env_key = os.environ.get('SECRET_KEY')
+    if env_key and env_key != 'your_secret_key_here':
+        return env_key
+
+    # 2. Prüfe ob .secret_key Datei existiert
+    secret_file = os.path.join(DATA_DIR, '.secret_key')
+    if os.path.exists(secret_file) and os.path.isfile(secret_file):
+        with open(secret_file, 'r') as f:
+            return f.read().strip()
+
+    # 3. Generiere neuen Key und speichere ihn
+    new_key = os.urandom(32).hex()
+    with open(secret_file, 'w') as f:
+        f.write(new_key)
+    logger.info('Neuer SECRET_KEY wurde generiert und gespeichert')
+    return new_key
+
+
 app = Flask(__name__)
-# Secret Key aus Umgebungsvariable oder generiere einen sicheren Standard
-app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24).hex())
-app.config['UPLOAD_FOLDER'] = 'static/uploads'
+app.secret_key = get_or_create_secret_key()
+app.config['UPLOAD_FOLDER'] = os.path.join(DATA_DIR, 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 socketio = SocketIO(app)
 
@@ -41,15 +71,144 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 class User(UserMixin):
-    def __init__(self, username):
+    """Benutzer-Klasse mit Rollen-Unterstützung"""
+
+    def __init__(self, username, roles=None):
         self.id = username
+        self._roles = roles or []
+        self.is_event_user = False
+
+    @property
+    def roles(self):
+        """Gibt die Rollen des Benutzers zurück (lädt bei Bedarf aus DB)"""
+        if not self._roles:
+            self._roles = db.get_user_roles(self.id)
+        return self._roles
+
+    def has_role(self, role_name):
+        """Prüft ob der Benutzer eine bestimmte Rolle hat"""
+        return role_name in self.roles
+
+    def has_any_role(self, role_names):
+        """Prüft ob der Benutzer mindestens eine der angegebenen Rollen hat"""
+        return any(role in self.roles for role in role_names)
+
+    def is_admin(self):
+        """Prüft ob der Benutzer Admin ist"""
+        return 'Admin' in self.roles
+
+    def is_stagemanager(self):
+        """Prüft ob der Benutzer Stagemanager ist"""
+        return 'Stagemanager' in self.roles
+
+    def can_access_stage(self):
+        """Prüft ob der Benutzer Zugriff auf die Bühnenanzeige hat"""
+        return self.has_any_role(['ViewerStage', 'Stagemanager', 'Admin'])
+
+    def can_access_backstage(self):
+        """Prüft ob der Benutzer Zugriff auf die Backstage-Anzeige hat"""
+        return self.has_any_role(['ViewerBackstage', 'Stagemanager', 'Admin'])
+
+    def can_access_timetable(self):
+        """Prüft ob der Benutzer Zugriff auf die Zeitplan-Anzeige hat"""
+        return self.has_any_role(['ViewerTimetable', 'Stagemanager', 'Admin'])
+
+    def can_access_admin(self):
+        """Prüft ob der Benutzer Zugriff auf das Admin-Panel hat"""
+        return self.has_any_role(['Stagemanager', 'Admin'])
+
+
+class EventUser(UserMixin):
+    """Anonymer Benutzer via Veranstaltungspasswort - nur ViewerStage-Zugriff"""
+
+    def __init__(self):
+        self.id = '__event_user__'
+        self._roles = ['ViewerStage']
+        self.is_event_user = True
+
+    @property
+    def roles(self):
+        return self._roles
+
+    def has_role(self, role_name):
+        return role_name in self._roles
+
+    def has_any_role(self, role_names):
+        return any(role in self._roles for role in role_names)
+
+    def is_admin(self):
+        return False
+
+    def is_stagemanager(self):
+        return False
+
+    def can_access_stage(self):
+        return True
+
+    def can_access_backstage(self):
+        return False
+
+    def can_access_timetable(self):
+        return False
+
+    def can_access_admin(self):
+        return False
+
 
 @login_manager.user_loader
 def load_user(user_id):
+    """Lädt einen Benutzer für Flask-Login"""
+    # Event-User (Veranstaltungspasswort)
+    if user_id == '__event_user__':
+        return EventUser()
+
+    # Regulärer Benutzer
     user = db.get_user(user_id)
     if user:
-        return User(user_id)
+        roles = db.get_user_roles(user_id)
+        return User(user_id, roles=roles)
     return None
+
+
+# ==================== ROLLEN-DECORATORS ====================
+
+def role_required(*required_roles):
+    """
+    Decorator der mindestens eine der angegebenen Rollen erfordert.
+    Verwendung: @role_required('Admin', 'Stagemanager')
+    """
+    def decorator(f):
+        @wraps(f)
+        @login_required
+        def decorated_function(*args, **kwargs):
+            if not current_user.has_any_role(required_roles):
+                abort(403)
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+
+def admin_required(f):
+    """Decorator für Admin-only Routes"""
+    @wraps(f)
+    @login_required
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_admin():
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def stagemanager_or_admin_required(f):
+    """Decorator für Stagemanager oder Admin Routes"""
+    @wraps(f)
+    @login_required
+    def decorated_function(*args, **kwargs):
+        if not current_user.can_access_admin():
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated_function
+
 
 schedule = []
 current_band_index = -1
@@ -459,8 +618,8 @@ def start_timer():
         'band': band['band'],
         'remaining': remaining,
         'total_duration': band['duration'] * 60,
-        'warn_orange': warn_orange,
-        'warn_red': warn_red
+        'warn_orange': get_warn_orange(),
+        'warn_red': get_warn_red()
     }
 
     if next_band_info:
@@ -494,15 +653,24 @@ def check_time_conflict(start_date, start_time, end_time, duration, end_date):
 
 @app.route('/')
 @app.route('/stage')
+@login_required
 def stage():
+    if not current_user.can_access_stage():
+        abort(403)
     return render_template('index.html', logo=get_logo_filename(), logo_size_percent=get_logo_size_percent(), band_logos=get_band_logos())
 
 @app.route('/backstage')
+@login_required
 def backstage():
+    if not current_user.can_access_backstage():
+        abort(403)
     return render_template('backstage.html', logo=get_logo_filename(), logo_size_percent=get_logo_size_percent(), band_logos=get_band_logos())
 
 @app.route('/timetable')
+@login_required
 def timetable():
+    if not current_user.can_access_timetable():
+        abort(403)
     return render_template('timetable.html', logo=get_logo_filename(), logo_size_percent=get_logo_size_percent())
 
 @app.route('/guide')
@@ -647,8 +815,13 @@ def status():
 @app.route('/admin', methods=['GET', 'POST'])
 @login_required
 def admin():
+    # Nur Stagemanager und Admin haben Zugriff
+    if not current_user.can_access_admin():
+        abort(403)
+
     global current_band_index, timer_running, end_time
     today = datetime.now().date().isoformat()
+    is_full_admin = current_user.is_admin()
 
     if request.method == 'POST':
         action = request.form.get('action')
@@ -659,6 +832,8 @@ def admin():
         elif action == 'pause':
             timer_running = False
         elif action == 'upload_logo':
+            if not is_full_admin:
+                abort(403)
             file = request.files.get('logo')
             if file and file.filename:
                 # Validiere Dateityp
@@ -681,9 +856,13 @@ def admin():
                     logger.error(f"Fehler beim Hochladen des Logos: {e}")
                     return "Fehler beim Hochladen", 500
         elif action == 'set_logo_size':
+            if not is_full_admin:
+                abort(403)
             logo_size_percent = int(request.form.get('logo_size_percent', 10))
             db.set_setting('logo_size_percent', str(logo_size_percent))
         elif action == 'reload':
+            if not is_full_admin:
+                abort(403)
             load_schedule()
         elif action == 'save':
             # Speichere alten Schedule für Smart Rename
@@ -797,6 +976,8 @@ def admin():
                 logger.info("Currently playing band was deleted - timer stopped")
 
         elif action == 'update_config':
+            if not is_full_admin:
+                abort(403)
             try:
                 warn_orange = int(request.form.get('warn_orange', 5))
                 warn_red = int(request.form.get('warn_red', 1))
@@ -814,6 +995,8 @@ def admin():
             except ValueError:
                 return "Ungültige Warnzeit-Werte", 400
         elif action == 'add_user':
+            if not is_full_admin:
+                abort(403)
             new_user = request.form.get('new_username', '').strip()
             new_pass = request.form.get('new_password', '')
 
@@ -837,13 +1020,20 @@ def admin():
                 logger.error(f"Fehler beim Erstellen des Benutzers: {e}")
                 return "Fehler beim Erstellen des Benutzers", 500
         elif action == 'delete_user':
+            if not is_full_admin:
+                abort(403)
             username = request.form.get('username')
-            if username not in ['admin', 'Andre']:  # Verhindere das Löschen von admin und Andre
-                try:
-                    db.delete_user(username)
-                    logger.info(f"Benutzer gelöscht: {username}")
-                except Exception as e:
-                    logger.error(f"Fehler beim Löschen des Benutzers: {e}")
+            # Verhindere das Löschen des letzten Admin-Users
+            if db.count_admins() == 1 and db.user_has_role(username, 'Admin'):
+                return "Letzter Admin kann nicht gelöscht werden", 400
+            # Verhindere das Löschen des eigenen Users
+            if username == current_user.id:
+                return "Eigenen Account kann nicht gelöscht werden", 400
+            try:
+                db.delete_user(username)
+                logger.info(f"Benutzer gelöscht: {username}")
+            except Exception as e:
+                logger.error(f"Fehler beim Löschen des Benutzers: {e}")
         elif action == 'adjust_time':
             # Quick-Adjust: Verlängere/verkürze die laufende Band um X Minuten
             adjust_minutes = int(request.form.get('adjust_minutes', 0))
@@ -928,8 +1118,8 @@ def admin():
                     'band': schedule[current_band_index]['band'],
                     'remaining': remaining,
                     'total_duration': schedule[current_band_index]['duration'] * 60,
-                    'warn_orange': warn_orange,
-                    'warn_red': warn_red
+                    'warn_orange': get_warn_orange(),
+                    'warn_red': get_warn_red()
                 }
 
                 if next_band_info:
@@ -944,8 +1134,9 @@ def admin():
 
         return redirect(url_for('admin'))
 
-    # Lade Benutzerliste aus DB
-    userlist = db.get_all_users()
+    # Lade Benutzerliste mit Rollen aus DB (nur für Admin)
+    userlist = db.get_users_with_roles() if is_full_admin else []
+    all_roles = db.get_all_roles() if is_full_admin else []
 
     # Debug: Log schedule_conflicts vor dem Rendern
     logger.debug(f"=== Rendering Admin Page ===")
@@ -957,11 +1148,14 @@ def admin():
         logo=get_logo_filename(),
         logo_size_percent=get_logo_size_percent(),
         users=userlist,
+        all_roles=all_roles,
         warn_orange=get_warn_orange(),
         warn_red=get_warn_red(),
         today=today,
         schedule_conflicts=schedule_conflicts,
-        band_logos=get_band_logos()
+        band_logos=get_band_logos(),
+        is_full_admin=is_full_admin,
+        event_password_enabled=db.is_event_password_enabled()
     )
 
 @app.route('/download_example_csv')
@@ -1138,7 +1332,7 @@ def upload_band_logo():
         # Lösche altes Logo, falls vorhanden
         old_logo = db.get_band_logo(band_name)
         if old_logo:
-            old_logo_path = os.path.join('static/uploads/band_logos', old_logo)
+            old_logo_path = os.path.join(app.config['UPLOAD_FOLDER'], 'band_logos', old_logo)
             if os.path.exists(old_logo_path):
                 os.remove(old_logo_path)
 
@@ -1146,7 +1340,7 @@ def upload_band_logo():
         timestamp = int(time.time())
         safe_band_name = secure_filename(band_name)
         filename = f"{safe_band_name}_{timestamp}{file_ext}"
-        filepath = os.path.join('static/uploads/band_logos', filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'band_logos', filename)
 
         # Speichere Datei
         file.save(filepath)
@@ -1179,7 +1373,7 @@ def delete_band_logo():
 
     try:
         # Lösche Datei
-        filepath = os.path.join('static/uploads/band_logos', logo_filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'band_logos', logo_filename)
         if os.path.exists(filepath):
             os.remove(filepath)
 
@@ -1247,17 +1441,318 @@ def hide_all_history():
         logger.error(f"Fehler beim Leeren der Historie: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
 
+
+# ==================== ROLLEN-VERWALTUNG API ====================
+
+@app.route('/api/user/<username>/roles', methods=['GET'])
+@admin_required
+def get_user_roles_api(username):
+    """Gibt die Rollen eines Benutzers zurück"""
+    user = db.get_user(username)
+    if not user:
+        return jsonify({'success': False, 'message': 'Benutzer nicht gefunden'}), 404
+
+    roles = db.get_user_roles(username)
+    all_roles = db.get_all_roles()
+
+    return jsonify({
+        'success': True,
+        'username': username,
+        'roles': roles,
+        'all_roles': [r['name'] for r in all_roles]
+    })
+
+
+@app.route('/api/user/<username>/roles', methods=['POST'])
+@admin_required
+def set_user_roles_api(username):
+    """Setzt die Rollen eines Benutzers"""
+    user = db.get_user(username)
+    if not user:
+        return jsonify({'success': False, 'message': 'Benutzer nicht gefunden'}), 404
+
+    data = request.get_json()
+    roles = data.get('roles', [])
+
+    # Validiere Rollen-Kombination
+    if not db.validate_role_combination(roles):
+        return jsonify({
+            'success': False,
+            'message': 'Ungültige Rollen-Kombination. Viewer-Rollen können kombiniert werden, Stagemanager und Admin sind exklusiv.'
+        }), 400
+
+    # Verhindere das Entfernen der eigenen Admin-Rolle
+    if username == current_user.id and 'Admin' not in roles and current_user.is_admin():
+        return jsonify({
+            'success': False,
+            'message': 'Eigene Admin-Rolle kann nicht entfernt werden'
+        }), 400
+
+    # Verhindere das Entfernen des letzten Admins
+    if 'Admin' not in roles and db.user_has_role(username, 'Admin') and db.count_admins() == 1:
+        return jsonify({
+            'success': False,
+            'message': 'Letzter Admin-Benutzer kann nicht degradiert werden'
+        }), 400
+
+    db.set_user_roles(user['id'], roles)
+    logger.info(f"Rollen für '{username}' aktualisiert: {roles}")
+
+    return jsonify({
+        'success': True,
+        'message': 'Rollen aktualisiert',
+        'roles': roles
+    })
+
+
+@app.route('/api/roles', methods=['GET'])
+@admin_required
+def get_all_roles_api():
+    """Gibt alle verfügbaren Rollen zurück"""
+    roles = db.get_all_roles()
+    return jsonify({
+        'success': True,
+        'roles': roles
+    })
+
+
+# ==================== PASSWORT-VERWALTUNG API ====================
+
+@app.route('/api/user/change-password', methods=['POST'])
+@login_required
+def change_own_password():
+    """Ermöglicht einem eingeloggten Benutzer sein eigenes Passwort zu ändern"""
+    # Event-User dürfen kein Passwort ändern
+    if current_user.is_event_user:
+        return jsonify({
+            'success': False,
+            'message': 'Event-Benutzer können kein Passwort ändern'
+        }), 403
+
+    data = request.get_json()
+    current_password = data.get('current_password', '')
+    new_password = data.get('new_password', '')
+
+    # Validierung
+    if not current_password or not new_password:
+        return jsonify({
+            'success': False,
+            'message': 'Aktuelles und neues Passwort erforderlich'
+        }), 400
+
+    if len(new_password) < 6:
+        return jsonify({
+            'success': False,
+            'message': 'Neues Passwort muss mindestens 6 Zeichen lang sein'
+        }), 400
+
+    # Aktuelles Passwort überprüfen
+    user = db.get_user(current_user.id)
+    if not user or not check_password_hash(user['password_hash'], current_password):
+        return jsonify({
+            'success': False,
+            'message': 'Aktuelles Passwort ist falsch'
+        }), 400
+
+    # Neues Passwort setzen
+    new_hash = generate_password_hash(new_password)
+    if db.update_user_password(current_user.id, new_hash):
+        logger.info(f"Benutzer '{current_user.id}' hat sein Passwort geändert")
+        return jsonify({
+            'success': True,
+            'message': 'Passwort erfolgreich geändert'
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'message': 'Fehler beim Ändern des Passworts'
+        }), 500
+
+
+@app.route('/api/user/<username>/reset-password', methods=['POST'])
+@admin_required
+def reset_user_password(username):
+    """Ermöglicht einem Admin das Passwort eines anderen Benutzers zurückzusetzen"""
+    data = request.get_json()
+    new_password = data.get('new_password', '')
+
+    # Validierung
+    if not new_password:
+        return jsonify({
+            'success': False,
+            'message': 'Neues Passwort erforderlich'
+        }), 400
+
+    if len(new_password) < 6:
+        return jsonify({
+            'success': False,
+            'message': 'Neues Passwort muss mindestens 6 Zeichen lang sein'
+        }), 400
+
+    # Prüfen ob User existiert
+    user = db.get_user(username)
+    if not user:
+        return jsonify({
+            'success': False,
+            'message': 'Benutzer nicht gefunden'
+        }), 404
+
+    # Neues Passwort setzen
+    new_hash = generate_password_hash(new_password)
+    if db.update_user_password(username, new_hash):
+        logger.info(f"Admin '{current_user.id}' hat das Passwort von '{username}' zurückgesetzt")
+        return jsonify({
+            'success': True,
+            'message': f'Passwort für {username} wurde zurückgesetzt'
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'message': 'Fehler beim Zurücksetzen des Passworts'
+        }), 500
+
+
+# ==================== EVENT-PASSWORT API ====================
+
+@app.route('/api/settings/event-password', methods=['POST'])
+@admin_required
+def set_event_password_api():
+    """Setzt oder löscht das Veranstaltungspasswort"""
+    data = request.get_json()
+    password = data.get('password', '')
+
+    if password:
+        if len(password) < 4:
+            return jsonify({
+                'success': False,
+                'message': 'Passwort muss mindestens 4 Zeichen lang sein'
+            }), 400
+        db.set_event_password(password)
+        logger.info("Veranstaltungspasswort wurde gesetzt")
+        return jsonify({
+            'success': True,
+            'message': 'Veranstaltungspasswort wurde gesetzt',
+            'enabled': True
+        })
+    else:
+        db.clear_event_password()
+        logger.info("Veranstaltungspasswort wurde gelöscht")
+        return jsonify({
+            'success': True,
+            'message': 'Veranstaltungspasswort wurde gelöscht',
+            'enabled': False
+        })
+
+
+@app.route('/api/settings/event-password', methods=['GET'])
+@admin_required
+def get_event_password_status():
+    """Gibt den Status des Veranstaltungspassworts zurück"""
+    return jsonify({
+        'success': True,
+        'enabled': db.is_event_password_enabled()
+    })
+
+
+@app.route('/setup', methods=['GET', 'POST'])
+def setup():
+    """Ersteinrichtung - Admin-Account erstellen"""
+    # Wenn bereits User existieren, zur Login-Seite redirecten
+    if not db.needs_setup():
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        password_confirm = request.form.get('password_confirm', '')
+
+        # Validierung
+        if not username:
+            return render_template('setup.html', error='Benutzername erforderlich')
+        if len(username) < 3:
+            return render_template('setup.html', error='Benutzername muss mindestens 3 Zeichen haben')
+        if len(password) < 6:
+            return render_template('setup.html', error='Passwort muss mindestens 6 Zeichen haben')
+        if password != password_confirm:
+            return render_template('setup.html', error='Passwörter stimmen nicht überein')
+
+        # Admin-User erstellen
+        password_hash = generate_password_hash(password)
+        user_id = db.add_user(username, password_hash)
+
+        # Admin-Rolle zuweisen
+        db.add_role_to_user(user_id, 'Admin')
+
+        logger.info(f"Initial admin user '{username}' created via setup page")
+
+        # Direkt einloggen und zum Admin-Panel weiterleiten
+        roles = db.get_user_roles(username)
+        login_user(User(username, roles=roles))
+        return redirect(url_for('admin'))
+
+    return render_template('setup.html')
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # Wenn noch keine User existieren, zur Setup-Seite redirecten
+    if db.needs_setup():
+        return redirect(url_for('setup'))
+
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        user = db.get_user(username)
-        if user and check_password_hash(user['password_hash'], password):
-            login_user(User(username))
-            return redirect(url_for('admin'))
-        return render_template('login.html', logo=get_logo_filename(), error=True)
-    return render_template('login.html', logo=get_logo_filename())
+        login_type = request.form.get('login_type', 'user')
+
+        if login_type == 'event':
+            # Login mit Veranstaltungspasswort
+            event_password = request.form.get('event_password', '')
+            if db.verify_event_password(event_password):
+                event_user = EventUser()
+                login_user(event_user)
+                return redirect(url_for('stage'))
+            return render_template('login.html',
+                                   logo=get_logo_filename(),
+                                   event_password_enabled=db.is_event_password_enabled(),
+                                   error_event=True)
+        else:
+            # Regulärer Benutzer-Login
+            username = request.form.get('username', '')
+            password = request.form.get('password', '')
+            user = db.get_user(username)
+
+            if user and check_password_hash(user['password_hash'], password):
+                roles = db.get_user_roles(username)
+
+                # Prüfe ob User mindestens eine Rolle hat
+                if not roles:
+                    return render_template('login.html',
+                                           logo=get_logo_filename(),
+                                           event_password_enabled=db.is_event_password_enabled(),
+                                           error_user=True,
+                                           error_message='Keine Rolle zugewiesen. Kontaktiere einen Admin.')
+
+                login_user(User(username, roles=roles))
+
+                # Redirect basierend auf Rollen
+                if 'Admin' in roles or 'Stagemanager' in roles:
+                    return redirect(url_for('admin'))
+                elif 'ViewerStage' in roles:
+                    return redirect(url_for('stage'))
+                elif 'ViewerBackstage' in roles:
+                    return redirect(url_for('backstage'))
+                elif 'ViewerTimetable' in roles:
+                    return redirect(url_for('timetable'))
+                else:
+                    return redirect(url_for('stage'))
+
+            return render_template('login.html',
+                                   logo=get_logo_filename(),
+                                   event_password_enabled=db.is_event_password_enabled(),
+                                   error_user=True)
+
+    # GET Request - Login-Seite anzeigen
+    return render_template('login.html',
+                           logo=get_logo_filename(),
+                           event_password_enabled=db.is_event_password_enabled())
 
 @app.route('/logout')
 @login_required
@@ -1265,8 +1760,9 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
-@app.route('/uploads/<filename>')
+@app.route('/uploads/<path:filename>')
 def uploaded_file(filename):
+    """Serviert Dateien aus dem Upload-Verzeichnis (inkl. Unterverzeichnisse)"""
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 @socketio.on('admin_message')
@@ -1284,8 +1780,8 @@ def handle_admin_message(data):
     })
 
 if __name__ == '__main__':
-    # Erstelle notwendige Verzeichnisse
-    os.makedirs('static/uploads/band_logos', exist_ok=True)
+    # Erstelle notwendige Verzeichnisse im Data-Verzeichnis
+    os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'band_logos'), exist_ok=True)
 
     # Log startup information
     logger.info("=" * 50)

@@ -2,6 +2,111 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [2.3.2] - 2026-04-29
+
+### Geändert
+- Admin-Panel überarbeitet und erweitert
+- Setup-Seite verbessert (Umlaut-Fix, korrekte Zeichenkodierung)
+
+### Behoben
+- **Umlaut-Darstellung**: `<meta charset="UTF-8">` in allen HTML-Templates ergänzt
+- Zeichenkodierungsfehler bei deutschen Sonderzeichen behoben
+
+## [2.3.1] - 2026-02-04
+
+### Geändert
+- **Docker: Named Volumes** statt Host-Mounts für persistente Daten
+  - Keine Berechtigungsprobleme mehr beim Clonen von GitHub
+  - Volume `stagetimer_data` wird automatisch verwaltet
+- **Datenspeicherung zentralisiert**: Alle persistenten Daten (Datenbank, Secret Key, Uploads) liegen im `data/` Verzeichnis
+- Upload-Route erweitert für Unterverzeichnisse (`/uploads/<path:filename>`)
+
+### Behoben
+- **PermissionError in Docker**: Container startet jetzt zuverlässig ohne manuelle Rechteanpassungen
+- **IsADirectoryError**: `.secret_key` wird nicht mehr als Volume gemountet
+- Band-Logo-Pfade in Templates korrigiert
+
+## [2.3.0] - 2026-02-03
+
+### Hinzugefügt
+- **Web-Setup bei Erstinstallation**: Bei der ersten Installation erscheint automatisch eine Setup-Seite zum Erstellen des Admin-Accounts
+- **Automatische SECRET_KEY Generierung**: Session-Key wird automatisch generiert und persistent in `.secret_key` gespeichert
+
+### Geändert
+- **Vereinfachte Installation**: Keine manuelle Konfiguration mehr nötig - einfach starten und loslegen
+- **Dokumentation überarbeitet**: README mit vereinfachter Installationsanleitung
+
+### Entfernt
+- Hardcodierte Benutzernamen (`admin`, `Andre`) aus dem Code entfernt
+- Migrations-Skripte entfernt (`migrate_to_db.py`, `hash.py`)
+- VERSION Datei entfernt (Version steht in README/CHANGELOG)
+
+## [2.2.1] - 2026-02-03
+
+### Hinzugefügt
+- **Nachrichten-Vorschau im Admin-Panel**: Gesendete Nachrichten an Bands werden jetzt auch in der Display-Vorschau angezeigt
+
+## [2.2.0] - 2026-02-03
+
+### Hinzugefügt
+- **Passwort-Verwaltung für Benutzer**
+  - Benutzer können ihr eigenes Passwort ändern (Button im Header)
+  - Aktuelles Passwort muss zur Bestätigung eingegeben werden
+  - Neues Passwort muss mindestens 6 Zeichen lang sein
+- **Admin Passwort-Reset**
+  - Admins können Passwörter anderer Benutzer zurücksetzen
+  - Neuer "Passwort" Button in der Benutzerverwaltung
+  - Kein aktuelles Passwort erforderlich (nur für Admins)
+- Neue API-Endpoints:
+  - `POST /api/user/change-password` - Eigenes Passwort ändern
+  - `POST /api/user/<username>/reset-password` - Admin Passwort-Reset
+- Neue Datenbank-Funktion `update_user_password()`
+
+## [2.1.1] - 2026-02-03
+
+### Behoben
+- **Kritischer Bug in start_timer()**: NameError behoben - `warn_orange` und `warn_red` wurden als nicht existierende Variablen verwendet statt der Funktionen `get_warn_orange()` und `get_warn_red()`
+- Timer-Start funktioniert jetzt zuverlässig über Admin-Panel
+- Historie wird korrekt gefüllt nach Ablauf einer Band
+
+## [2.1.0] - 2026-02-03
+
+### Hinzugefügt
+- **Rollenbasiertes Berechtigungssystem** mit 5 Rollen:
+  - `ViewerStage` - Nur Bühnenanzeige (index.html)
+  - `ViewerBackstage` - Nur Backstage-Anzeige (backstage.html)
+  - `ViewerTimetable` - Nur Zeitplan-Anzeige (timetable.html)
+  - `Stagemanager` - Eingeschränkter Admin-Zugriff mit allen Viewer-Rechten
+  - `Admin` - Vollzugriff auf alle Funktionen
+- **Veranstaltungspasswort** für anonymen Zugang zur Bühnenanzeige
+  - Einstellbar im Admin-Panel
+  - Separater Login-Tab auf der Login-Seite
+  - Gibt nur ViewerStage-Berechtigung
+- **Rollen-Verwaltung** im Admin-Panel
+  - Klick auf Benutzername öffnet Rollen-Modal
+  - Checkboxen für Rollenzuweisung
+  - Validierung: Viewer-Rollen kombinierbar, Stagemanager/Admin exklusiv
+- **Geschützte Viewer-Seiten** - Alle Seiten erfordern jetzt Login
+- **Logout-Button** in der Navigation aller Views
+- Neue Datenbank-Tabellen: `roles`, `user_roles`
+- Neue API-Endpoints:
+  - `GET/POST /api/user/<username>/roles` - Rollenverwaltung
+  - `GET/POST /api/settings/event-password` - Veranstaltungspasswort
+
+### Geändert
+- **Login-Seite** mit Tabs für Benutzer-Login und Veranstaltungspasswort
+- **Admin-Panel** zeigt Sektionen basierend auf Rolle:
+  - Stagemanager sieht: Display-Vorschau, Band-Nachricht, Zeitplan, Historie, Anleitung
+  - Admin sieht zusätzlich: CSV-Verwaltung, Logo-Settings, Warnzeiten, Benutzerverwaltung
+- Hardcodierte Admin-Checks (`admin`/`Andre`) durch Rollensystem ersetzt
+- Navigation zeigt nur zugängliche Seiten basierend auf Benutzerrolle
+- Bestehende User `admin` und `Andre` werden automatisch zur Admin-Rolle migriert
+
+### Behoben
+- Benutzer können sich nicht mehr selbst löschen
+- Letzter Admin-Benutzer kann nicht degradiert werden
+- Eigene Admin-Rolle kann nicht entfernt werden
+
 ## [2.0.1] - 2026-02-03
 
 ### Hinzugefügt

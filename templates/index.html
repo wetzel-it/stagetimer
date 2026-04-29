@@ -2,7 +2,6 @@
 <html data-theme="dark">
 <head>
   <title>Stage Timer</title>
-  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -392,10 +391,19 @@
       </svg>
     </button>
     <div class="burger-dropdown" id="burgerDropdown">
+      {% if current_user.can_access_stage() %}
       <a href="/stage" class="active">Stage</a>
+      {% endif %}
+      {% if current_user.can_access_backstage() %}
       <a href="/backstage">Backstage</a>
+      {% endif %}
+      {% if current_user.can_access_timetable() %}
       <a href="/timetable">Timetable</a>
+      {% endif %}
+      {% if current_user.can_access_admin() %}
       <a href="/admin">Admin</a>
+      {% endif %}
+      <a href="/logout">Logout</a>
     </div>
   </div>
 
@@ -506,7 +514,7 @@
         // Zeige Band-Logo, falls vorhanden
         const bandLogoImg = document.getElementById('bandLogo');
         if (data.band_logo) {
-          bandLogoImg.src = `/static/uploads/band_logos/${data.band_logo}`;
+          bandLogoImg.src = `/uploads/band_logos/${data.band_logo}`;
           bandLogoImg.style.display = 'block';
         } else {
           bandLogoImg.style.display = 'none';
