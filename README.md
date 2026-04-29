@@ -14,6 +14,7 @@ Eine umfassende Webanwendung zur Verwaltung und Anzeige von Band-Zeitplänen fü
 - **Responsive Design**: Funktioniert auf Smartphones, Tablets und Desktop-Displays
 
 ### Features (v2.3)
+- **CLI-Hilfsskript**: Serververwaltung per `stagetimer update/restart/logs/status`
 - **Konfigurierbare Abschluss-Anzeige**: Überschrift und Nachricht für das Ende der Veranstaltung im Admin-Panel einstellbar
 - **Automatische Ersteinrichtung**: Setup-Seite erscheint beim ersten Start zur Admin-Account-Erstellung
 - **Automatischer SECRET_KEY**: Session-Key wird generiert und persistent gespeichert — keine manuelle Konfiguration nötig
@@ -179,6 +180,28 @@ date,band,start,end
 2026-02-02,Next Band,20:30,22:00
 ```
 
+## CLI-Hilfsskript
+
+Das enthaltene `stagetimer.sh` ermöglicht einfache Serververwaltung per Kommandozeile.
+
+### Installation (einmalig auf dem Server)
+
+```bash
+cp /opt/stagetimer/stagetimer.sh /usr/local/bin/stagetimer
+chmod +x /usr/local/bin/stagetimer
+```
+
+### Verfügbare Befehle
+
+| Befehl | Beschreibung |
+|--------|--------------|
+| `stagetimer update` | Git Pull + Docker Rebuild + Neustart |
+| `stagetimer restart` | Container neu starten |
+| `stagetimer start` | Container starten |
+| `stagetimer stop` | Container stoppen |
+| `stagetimer logs` | Live-Logs anzeigen |
+| `stagetimer status` | Container-Status anzeigen |
+
 ## Sicherheit
 
 1. **HTTPS**: In Produktion immer HTTPS verwenden (z.B. nginx + Let's Encrypt)
@@ -269,7 +292,7 @@ stagetimer/
 
 Die vollständige Versionshistorie findest du in der [CHANGELOG.md](CHANGELOG.md).
 
-**Aktuelle Version:** 2.3.3
+**Aktuelle Version:** 2.3.4
 
 ## Lizenz
 

@@ -2,6 +2,14 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [2.3.4] - 2026-04-29
+
+### Hinzugefügt
+- **CLI-Hilfsskript** (`stagetimer.sh`): Einfache Serververwaltung per Kommandozeile
+  - `stagetimer update` — Git Pull + Docker Rebuild
+  - `stagetimer restart/stop/start/logs/status`
+  - Installation: Script nach `/usr/local/bin/stagetimer` kopieren
+
 ## [2.3.3] - 2026-04-29
 
 ### Hinzugefügt
