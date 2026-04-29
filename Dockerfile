@@ -20,9 +20,9 @@ COPY database.py .
 COPY static/ static/
 COPY templates/ templates/
 
-# Erstelle Upload- und Backup-Verzeichnisse und setze Berechtigungen
-RUN mkdir -p static/uploads backups && \
-    chmod 755 static/uploads backups
+# Erstelle alle notwendigen Verzeichnisse und setze Berechtigungen
+RUN mkdir -p static/uploads backups data/uploads/band_logos && \
+    chmod 755 static/uploads backups data
 
 # Erstelle Benutzer für Anwendung (Security Best Practice)
 RUN useradd -m -u 1000 stagetimer && \
