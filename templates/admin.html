@@ -771,6 +771,38 @@
     .btn-icon:hover svg {
       color: white;
     }
+
+    /* Two-column admin layout */
+    .admin-two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      align-items: start;
+    }
+
+    .admin-col {
+      min-width: 0;
+    }
+
+    .admin-col:first-child {
+      padding-right: 0.75rem;
+    }
+
+    .admin-col:last-child {
+      padding-left: 0.75rem;
+    }
+
+    @media (max-width: 1024px) {
+      .admin-two-col {
+        grid-template-columns: 1fr;
+      }
+      .admin-col:first-child {
+        padding-right: 0;
+      }
+      .admin-col:last-child {
+        padding-left: 0;
+      }
+    }
   </style>
 </head>
 <body>
@@ -835,356 +867,370 @@
     </div>
     {% endif %}
 
-    <div class="section">
-      <h2>Display Vorschau</h2>
-      <div class="preview-container">
-        <div class="timer-preview">
-          <div class="band-name-preview" id="previewBandName">-</div>
-          <div class="time-preview" id="previewTime">--:--</div>
-          <div class="progress-container-preview">
-            <div class="progress-bar-preview" id="previewProgress"></div>
-          </div>
-          <div class="preview-message" id="previewMessage"></div>
-        </div>
-      </div>
+    <div class="admin-two-col">
 
-      <div class="quick-adjust-container" id="quickAdjustContainer" style="margin-top: 1.5rem; display: none;">
-        <h3 style="font-size: 1.1rem; margin-bottom: 0.75rem; color: var(--text);">Zeit anpassen</h3>
-        <div class="quick-adjust-buttons">
-          <button class="btn btn-primary" onclick="adjustTime(1)">+1 Min</button>
-          <button class="btn btn-primary" onclick="adjustTime(5)">+5 Min</button>
-          <button class="btn btn-primary" onclick="adjustTime(10)">+10 Min</button>
-        </div>
-        <div class="quick-adjust-buttons" style="margin-top: 0.75rem;">
-          <button class="btn btn-danger" onclick="adjustTime(-1)">-1 Min</button>
-          <button class="btn btn-danger" onclick="adjustTime(-5)">-5 Min</button>
-          <button class="btn btn-danger" onclick="adjustTime(-10)">-10 Min</button>
-        </div>
-        <div id="adjustFeedback" style="margin-top: 0.75rem; color: var(--text); font-size: 0.9rem;"></div>
-      </div>
+      <!-- Linke Spalte -->
+      <div class="admin-col">
 
-      <div class="message-container" style="margin-top: 1.5rem;">
-        <h3 style="font-size: 1.1rem; margin-bottom: 0.75rem; color: var(--text);">Nachricht an Band</h3>
-        <div class="form-group">
-          <input type="text" id="messageInput" placeholder="Nachricht eingeben..." class="form-control" style="margin-bottom: 0.75rem;">
-          <div class="quick-adjust-buttons">
-            <button class="btn btn-primary" onclick="sendMessage(10)">10 Sek</button>
-            <button class="btn btn-primary" onclick="sendMessage(15)">15 Sek</button>
-            <button class="btn btn-primary" onclick="sendMessage(30)">30 Sek</button>
-          </div>
-        </div>
-        <div id="messageFeedback" style="margin-top: 0.75rem; color: var(--text); font-size: 0.9rem;"></div>
-      </div>
-    </div>
-
-    <div class="section">
-      <h2>Neuen Slot anlegen</h2>
-      <div id="addBandError" class="error-message"></div>
-      <form method="POST" id="addBandForm" class="add-band-form">
-        <input type="hidden" name="action" value="add_band">
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Datum</label>
-            <input type="date" name="date" value="{{ today }}" class="form-control" required>
-          </div>
-          <div class="form-group">
-            <label>Bandname</label>
-            <input type="text" name="band" class="form-control" required>
-          </div>
-          <div class="form-group">
-            <label>Startzeit</label>
-            <input type="time" name="start" class="form-control" required>
-          </div>
-          <div class="form-group">
-            <label>Endzeit</label>
-            <input type="time" name="end" class="form-control" required>
-          </div>
-        </div>
-        <button class="btn btn-primary" type="submit">Hinzufügen</button>
-      </form>
-    </div>
-
-    <div class="section">
-      <h2>Zeitplan</h2>
-      <form method="post" id="scheduleForm">
-        <input type="hidden" name="action" id="formAction" value="">
-        <table>
-          <thead>
-            <tr>
-              <th><input type="checkbox" id="selectAll" title="Alle auswählen"></th>
-              <th>Datum</th>
-              <th>Band</th>
-              <th>Start</th>
-              <th>Ende</th>
-              <th>Dauer</th>
-              <th>Logo</th>
-            </tr>
-          </thead>
-          <tbody id="scheduleTableBody">
-            {% for band in schedule %}
-            <tr>
-              <td>
-                <input type="checkbox" name="selected[]" value="{{ loop.index0 }}">
-              </td>
-              <td>
-                <input type="date" name="date_{{ loop.index0 }}" value="{{ band.date }}" required>
-              </td>
-              <td>
-                <input type="text" name="band_{{ loop.index0 }}" value="{{ band.band }}" required>
-              </td>
-              <td>
-                <input type="time" name="start_{{ loop.index0 }}" value="{{ band.start }}" required>
-              </td>
-              <td>
-                <input type="time" name="end_{{ loop.index0 }}" value="{{ band.end }}" required>
-              </td>
-              <td style="text-align: center; color: #666;">
-                {{ band.duration }} Min
-                {% if band.end_date != band.date %}
-                  <span style="color: var(--warning); font-size: 0.85em;" title="Endet am {{ band.end_date }}">(+1 Tag)</span>
-                {% endif %}
-              </td>
-              <td style="text-align: center; padding: 0.5rem;">
-                <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
-                  {% if band.band in band_logos %}
-                    <img src="/uploads/band_logos/{{ band_logos[band.band] }}"
-                         alt="{{ band.band }}"
-                         style="max-height: 40px; max-width: 60px; object-fit: contain; border-radius: 4px;">
-                    <button type="button" class="btn-icon" onclick="deleteBandLogo('{{ band.band }}')" title="Logo löschen">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  {% else %}
-                    <button type="button" class="btn-icon" onclick="openLogoUpload('{{ band.band }}')" title="Logo hochladen">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </button>
-                  {% endif %}
-                </div>
-                <input type="file" id="logoInput_{{ band.band }}" accept="image/*" style="display: none;" onchange="uploadBandLogo('{{ band.band }}', this)">
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-
-        <div class="button-group">
-          <button type="submit" onclick="submitForm('save')" class="btn btn-primary">Änderungen speichern</button>
-          <button type="submit" onclick="submitForm('delete')" class="btn btn-danger" id="deleteButton" disabled>Ausgewählte löschen</button>
-          {% if is_full_admin %}
-          <button type="submit" onclick="submitForm('reload')" class="btn btn-secondary">CSV neu laden</button>
-          {% endif %}
-        </div>
-      </form>
-    </div>
-
-    {% if is_full_admin %}
-    <div class="section">
-      <h2>CSV Verwaltung</h2>
-      <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">
-        Hier kannst du eine CSV-Datei hochladen oder eine Beispiel-CSV herunterladen, die als Vorlage dient.
-      </p>
-
-      <div style="display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; margin-bottom: 1rem;">
-        <!-- CSV Upload -->
-        <div style="background: var(--surface); padding: 1.5rem; border-radius: 0.5rem;">
-          <h3 style="margin-top: 0; font-size: 1.1rem; margin-bottom: 1rem;">CSV hochladen</h3>
-          <form id="uploadCsvForm" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 1rem;">
-            <div class="file-input-wrapper">
-              <input type="file" name="csv_file" id="csvFileInput" accept=".csv" class="form-control" required>
-            </div>
-            <button type="submit" class="btn btn-primary" style="width: 100%;">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="display: inline-block; vertical-align: middle; margin-right: 0.5rem;">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-              CSV hochladen
-            </button>
-          </form>
-          <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0;">
-            Die CSV wird validiert und bei Konflikten abgelehnt.
-          </p>
-        </div>
-
-        <!-- CSV Download -->
-        <div style="background: var(--surface); padding: 1.5rem; border-radius: 0.5rem;">
-          <h3 style="margin-top: 0; font-size: 1.1rem; margin-bottom: 1rem;">Beispiel-CSV herunterladen</h3>
-          <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
-            Lade eine korrekt formatierte Beispiel-CSV herunter, die du als Vorlage verwenden kannst.
-          </p>
-          <a href="/download_example_csv" class="btn btn-secondary" style="width: 100%; text-align: center; display: inline-block; text-decoration: none;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="display: inline-block; vertical-align: middle; margin-right: 0.5rem;">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-            </svg>
-            Beispiel herunterladen
-          </a>
-          <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0;">
-            Format: date, band, start, end
-          </p>
-        </div>
-      </div>
-
-      <!-- Upload Status/Meldung -->
-      <div id="uploadStatus" style="display: none; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;"></div>
-    </div>
-    {% endif %}
-
-    <!-- Historie -->
-    <div class="section">
-      <h2 style="display: flex; align-items: center; justify-content: space-between;">
-        <span>Historie</span>
-        <button type="button" class="btn btn-danger" onclick="clearAllHistory()" id="clearAllHistoryBtn" style="font-size: 0.9rem; padding: 0.4rem 0.8rem;">
-          Gesamte Historie leeren
-        </button>
-      </h2>
-
-      <div id="historyContainer">
-        <p style="color: var(--text-muted); text-align: center; padding: 2rem;">
-          Lade Historie...
-        </p>
-      </div>
-    </div>
-
-    {% if is_full_admin %}
-    <div class="section">
-      <h2>Logo Einstellungen</h2>
-      <form method="POST" enctype="multipart/form-data">
-        <div class="file-input-wrapper">
-          <input type="file" name="logo" class="form-control">
-          <button class="btn btn-primary" name="action" value="upload_logo">Logo hochladen</button>
-        </div>
-      </form>
-
-      <form method="POST" style="margin-top: 1rem;">
-        <input type="hidden" name="action" value="set_logo_size">
-        <div class="form-group">
-          <label>Logo-Größe (% der Bildschirmbreite)</label>
-          <input type="number" name="logo_size_percent" min="1" max="100" value="{{ logo_size_percent }}" class="form-control" required>
-        </div>
-        <button class="btn btn-primary" type="submit">Größe speichern</button>
-      </form>
-
-      <div class="logo-container">
-        {% if logo %}
-          <img src="/uploads/{{ logo }}" class="logo-preview" style="max-width: {{ logo_size_percent }}%;">
-        {% endif %}
-      </div>
-    </div>
-
-    <div class="section">
-      <h2>Warnzeit-Einstellungen</h2>
-      <form method="POST">
-        <input type="hidden" name="action" value="update_config">
-        <div class="form-group">
-          <label>Orange Warnung (Minuten)</label>
-          <input type="number" name="warn_orange" value="{{ warn_orange }}" class="form-control" required min="1">
-        </div>
-        <div class="form-group" style="margin-top: 1rem;">
-          <label>Rote Warnung (Minuten)</label>
-          <input type="number" name="warn_red" value="{{ warn_red }}" class="form-control" required min="1">
-        </div>
-        <button class="btn btn-primary" type="submit" style="margin-top: 1rem;">Warnzeiten speichern</button>
-      </form>
-    </div>
-
-    <div class="section">
-      <h2>Abschluss-Anzeige</h2>
-      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">Text der angezeigt wird, wenn kein Programm mehr läuft.</p>
-      <form method="POST">
-        <input type="hidden" name="action" value="set_end_text">
-        <div class="form-group">
-          <label>Überschrift</label>
-          <input type="text" name="end_title" value="{{ end_title }}" class="form-control" placeholder="z.B. Feierabend">
-        </div>
-        <div class="form-group" style="margin-top: 1rem;">
-          <label>Nachricht</label>
-          <input type="text" name="end_message" value="{{ end_message }}" class="form-control" placeholder="z.B. Danke an alle Beteiligten!">
-        </div>
-        <button class="btn btn-primary" type="submit" style="margin-top: 1rem;">Speichern</button>
-      </form>
-    </div>
-    {% endif %}
-
-    {% if is_full_admin %}
-    <div class="section">
-      <h2>Benutzerverwaltung</h2>
-      <form method="POST">
-        <input type="hidden" name="action" value="add_user">
-        <div class="form-group">
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-            <div>
-              <label>Benutzername</label>
-              <input type="text" name="new_username" class="form-control" required minlength="3">
-            </div>
-            <div>
-              <label>Passwort</label>
-              <input type="password" name="new_password" class="form-control" required minlength="6">
+        <div class="section">
+          <h2>Display Vorschau</h2>
+          <div class="preview-container">
+            <div class="timer-preview">
+              <div class="band-name-preview" id="previewBandName">-</div>
+              <div class="time-preview" id="previewTime">--:--</div>
+              <div class="progress-container-preview">
+                <div class="progress-bar-preview" id="previewProgress"></div>
+              </div>
+              <div class="preview-message" id="previewMessage"></div>
             </div>
           </div>
-        </div>
-        <button class="btn btn-primary" type="submit">Nutzer erstellen</button>
-      </form>
 
-      <h3 style="margin-top: 1.5rem;">Vorhandene Benutzer</h3>
-      <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
-        Klicke auf einen Benutzernamen, um die Rollen zu bearbeiten.
-      </p>
-      <ul class="user-list">
-        {% for user in users %}
-          <li style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem; background: var(--surface); border-radius: 0.5rem; margin-bottom: 0.5rem;">
-            <div style="flex: 1; cursor: pointer;" onclick="openRoleModal('{{ user.username }}')">
-              <span style="font-weight: 500;">{{ user.username }}</span>
-              <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">
-                {% if user.roles %}
-                  {{ user.roles | join(', ') }}
-                {% else %}
-                  <span style="color: var(--danger);">Keine Rollen</span>
-                {% endif %}
+          <div class="quick-adjust-container" id="quickAdjustContainer" style="margin-top: 1.5rem; display: none;">
+            <h3 style="font-size: 1.1rem; margin-bottom: 0.75rem; color: var(--text);">Zeit anpassen</h3>
+            <div class="quick-adjust-buttons">
+              <button class="btn btn-primary" onclick="adjustTime(1)">+1 Min</button>
+              <button class="btn btn-primary" onclick="adjustTime(5)">+5 Min</button>
+              <button class="btn btn-primary" onclick="adjustTime(10)">+10 Min</button>
+            </div>
+            <div class="quick-adjust-buttons" style="margin-top: 0.75rem;">
+              <button class="btn btn-danger" onclick="adjustTime(-1)">-1 Min</button>
+              <button class="btn btn-danger" onclick="adjustTime(-5)">-5 Min</button>
+              <button class="btn btn-danger" onclick="adjustTime(-10)">-10 Min</button>
+            </div>
+            <div id="adjustFeedback" style="margin-top: 0.75rem; color: var(--text); font-size: 0.9rem;"></div>
+          </div>
+
+          <div class="message-container" style="margin-top: 1.5rem;">
+            <h3 style="font-size: 1.1rem; margin-bottom: 0.75rem; color: var(--text);">Nachricht an Band</h3>
+            <div class="form-group">
+              <input type="text" id="messageInput" placeholder="Nachricht eingeben..." class="form-control" style="margin-bottom: 0.75rem;">
+              <div class="quick-adjust-buttons">
+                <button class="btn btn-primary" onclick="sendMessage(10)">10 Sek</button>
+                <button class="btn btn-primary" onclick="sendMessage(15)">15 Sek</button>
+                <button class="btn btn-primary" onclick="sendMessage(30)">30 Sek</button>
               </div>
             </div>
-            <div style="display: flex; gap: 0.5rem; align-items: center;">
-              <button type="button" class="btn btn-secondary" onclick="openResetPasswordModal('{{ user.username }}')" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">Passwort</button>
-              {% if user.username != current_user.id %}
-                <form method="POST" style="display: inline;">
-                  <input type="hidden" name="action" value="delete_user">
-                  <input type="hidden" name="username" value="{{ user.username }}">
-                  <button type="submit" class="delete-user" title="Nutzer löschen" onclick="return confirm('Benutzer {{ user.username }} wirklich löschen?')">x</button>
-                  </form>
-                {% endif %}
+            <div id="messageFeedback" style="margin-top: 0.75rem; color: var(--text); font-size: 0.9rem;"></div>
+          </div>
+        </div>
+
+        {% if is_full_admin %}
+
+        <div class="section">
+          <h2>Logo Einstellungen</h2>
+          <form method="POST" enctype="multipart/form-data">
+            <div class="file-input-wrapper">
+              <input type="file" name="logo" class="form-control">
+              <button class="btn btn-primary" name="action" value="upload_logo">Logo hochladen</button>
             </div>
-          </li>
-        {% endfor %}
-      </ul>
-    </div>
+          </form>
 
-    <!-- Veranstaltungspasswort -->
-    <div class="section">
-      <h2>Veranstaltungspasswort</h2>
-      <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-        Das Veranstaltungspasswort ermoglicht Gasten Zugang zur Buhnenanzeige ohne eigenen Benutzeraccount.
-      </p>
+          <form method="POST" style="margin-top: 1rem;">
+            <input type="hidden" name="action" value="set_logo_size">
+            <div class="form-group">
+              <label>Logo-Größe (% der Bildschirmbreite)</label>
+              <input type="number" name="logo_size_percent" min="1" max="100" value="{{ logo_size_percent }}" class="form-control" required>
+            </div>
+            <button class="btn btn-primary" type="submit">Größe speichern</button>
+          </form>
 
-      <div id="eventPasswordStatus" style="padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; {% if event_password_enabled %}background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3);{% else %}background: rgba(100, 116, 139, 0.1); border: 1px solid rgba(100, 116, 139, 0.3);{% endif %}">
-        <span style="{% if event_password_enabled %}color: #22c55e;{% else %}color: var(--text-secondary);{% endif %}">
-          Status: {% if event_password_enabled %}Aktiv{% else %}Nicht gesetzt{% endif %}
-        </span>
+          <div class="logo-container">
+            {% if logo %}
+              <img src="/uploads/{{ logo }}" class="logo-preview" style="max-width: {{ logo_size_percent }}%;">
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>Warnzeit-Einstellungen</h2>
+          <form method="POST">
+            <input type="hidden" name="action" value="update_config">
+            <div class="form-group">
+              <label>Orange Warnung (Minuten)</label>
+              <input type="number" name="warn_orange" value="{{ warn_orange }}" class="form-control" required min="1">
+            </div>
+            <div class="form-group" style="margin-top: 1rem;">
+              <label>Rote Warnung (Minuten)</label>
+              <input type="number" name="warn_red" value="{{ warn_red }}" class="form-control" required min="1">
+            </div>
+            <button class="btn btn-primary" type="submit" style="margin-top: 1rem;">Warnzeiten speichern</button>
+          </form>
+        </div>
+
+        <div class="section">
+          <h2>Abschluss-Anzeige</h2>
+          <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">Text der angezeigt wird, wenn kein Programm mehr läuft.</p>
+          <form method="POST">
+            <input type="hidden" name="action" value="set_end_text">
+            <div class="form-group">
+              <label>Überschrift</label>
+              <input type="text" name="end_title" value="{{ end_title }}" class="form-control" placeholder="z.B. Feierabend">
+            </div>
+            <div class="form-group" style="margin-top: 1rem;">
+              <label>Nachricht</label>
+              <input type="text" name="end_message" value="{{ end_message }}" class="form-control" placeholder="z.B. Danke an alle Beteiligten!">
+            </div>
+            <button class="btn btn-primary" type="submit" style="margin-top: 1rem;">Speichern</button>
+          </form>
+        </div>
+
+        <div class="section">
+          <h2>Benutzerverwaltung</h2>
+          <form method="POST">
+            <input type="hidden" name="action" value="add_user">
+            <div class="form-group">
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                <div>
+                  <label>Benutzername</label>
+                  <input type="text" name="new_username" class="form-control" required minlength="3">
+                </div>
+                <div>
+                  <label>Passwort</label>
+                  <input type="password" name="new_password" class="form-control" required minlength="6">
+                </div>
+              </div>
+            </div>
+            <button class="btn btn-primary" type="submit">Nutzer erstellen</button>
+          </form>
+
+          <h3 style="margin-top: 1.5rem;">Vorhandene Benutzer</h3>
+          <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
+            Klicke auf einen Benutzernamen, um die Rollen zu bearbeiten.
+          </p>
+          <ul class="user-list">
+            {% for user in users %}
+              <li style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem; background: var(--surface); border-radius: 0.5rem; margin-bottom: 0.5rem;">
+                <div style="flex: 1; cursor: pointer;" onclick="openRoleModal('{{ user.username }}')">
+                  <span style="font-weight: 500;">{{ user.username }}</span>
+                  <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                    {% if user.roles %}
+                      {{ user.roles | join(', ') }}
+                    {% else %}
+                      <span style="color: var(--danger);">Keine Rollen</span>
+                    {% endif %}
+                  </div>
+                </div>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <button type="button" class="btn btn-secondary" onclick="openResetPasswordModal('{{ user.username }}')" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">Passwort</button>
+                  {% if user.username != current_user.id %}
+                    <form method="POST" style="display: inline;">
+                      <input type="hidden" name="action" value="delete_user">
+                      <input type="hidden" name="username" value="{{ user.username }}">
+                      <button type="submit" class="delete-user" title="Nutzer löschen" onclick="return confirm('Benutzer {{ user.username }} wirklich löschen?')">x</button>
+                    </form>
+                  {% endif %}
+                </div>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+
+        <!-- Veranstaltungspasswort -->
+        <div class="section">
+          <h2>Veranstaltungspasswort</h2>
+          <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+            Das Veranstaltungspasswort ermoglicht Gasten Zugang zur Buhnenanzeige ohne eigenen Benutzeraccount.
+          </p>
+
+          <div id="eventPasswordStatus" style="padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; {% if event_password_enabled %}background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3);{% else %}background: rgba(100, 116, 139, 0.1); border: 1px solid rgba(100, 116, 139, 0.3);{% endif %}">
+            <span style="{% if event_password_enabled %}color: #22c55e;{% else %}color: var(--text-secondary);{% endif %}">
+              Status: {% if event_password_enabled %}Aktiv{% else %}Nicht gesetzt{% endif %}
+            </span>
+          </div>
+
+          <form id="eventPasswordForm" onsubmit="saveEventPassword(event)">
+            <div class="form-group">
+              <label>Neues Veranstaltungspasswort</label>
+              <input type="password" id="eventPasswordInput" class="form-control" placeholder="Leer lassen zum Deaktivieren" minlength="4">
+            </div>
+            <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+              <button type="submit" class="btn btn-primary">Passwort setzen</button>
+              {% if event_password_enabled %}
+              <button type="button" class="btn btn-danger" onclick="clearEventPassword()">Deaktivieren</button>
+              {% endif %}
+            </div>
+          </form>
+        </div>
+
+        {% endif %}
+
       </div>
 
-      <form id="eventPasswordForm" onsubmit="saveEventPassword(event)">
-        <div class="form-group">
-          <label>Neues Veranstaltungspasswort</label>
-          <input type="password" id="eventPasswordInput" class="form-control" placeholder="Leer lassen zum Deaktivieren" minlength="4">
+      <!-- Rechte Spalte -->
+      <div class="admin-col">
+
+        <div class="section">
+          <h2>Neuen Slot anlegen</h2>
+          <div id="addBandError" class="error-message"></div>
+          <form method="POST" id="addBandForm" class="add-band-form">
+            <input type="hidden" name="action" value="add_band">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Datum</label>
+                <input type="date" name="date" value="{{ today }}" class="form-control" required>
+              </div>
+              <div class="form-group">
+                <label>Bandname</label>
+                <input type="text" name="band" class="form-control" required>
+              </div>
+              <div class="form-group">
+                <label>Startzeit</label>
+                <input type="time" name="start" class="form-control" required>
+              </div>
+              <div class="form-group">
+                <label>Endzeit</label>
+                <input type="time" name="end" class="form-control" required>
+              </div>
+            </div>
+            <button class="btn btn-primary" type="submit">Hinzufügen</button>
+          </form>
         </div>
-        <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-          <button type="submit" class="btn btn-primary">Passwort setzen</button>
-          {% if event_password_enabled %}
-          <button type="button" class="btn btn-danger" onclick="clearEventPassword()">Deaktivieren</button>
-          {% endif %}
+
+        <div class="section">
+          <h2>Zeitplan</h2>
+          <form method="post" id="scheduleForm">
+            <input type="hidden" name="action" id="formAction" value="">
+            <table>
+              <thead>
+                <tr>
+                  <th><input type="checkbox" id="selectAll" title="Alle auswählen"></th>
+                  <th>Datum</th>
+                  <th>Band</th>
+                  <th>Start</th>
+                  <th>Ende</th>
+                  <th>Dauer</th>
+                  <th>Logo</th>
+                </tr>
+              </thead>
+              <tbody id="scheduleTableBody">
+                {% for band in schedule %}
+                <tr>
+                  <td>
+                    <input type="checkbox" name="selected[]" value="{{ loop.index0 }}">
+                  </td>
+                  <td>
+                    <input type="date" name="date_{{ loop.index0 }}" value="{{ band.date }}" required>
+                  </td>
+                  <td>
+                    <input type="text" name="band_{{ loop.index0 }}" value="{{ band.band }}" required>
+                  </td>
+                  <td>
+                    <input type="time" name="start_{{ loop.index0 }}" value="{{ band.start }}" required>
+                  </td>
+                  <td>
+                    <input type="time" name="end_{{ loop.index0 }}" value="{{ band.end }}" required>
+                  </td>
+                  <td style="text-align: center; color: #666;">
+                    {{ band.duration }} Min
+                    {% if band.end_date != band.date %}
+                      <span style="color: var(--warning); font-size: 0.85em;" title="Endet am {{ band.end_date }}">(+1 Tag)</span>
+                    {% endif %}
+                  </td>
+                  <td style="text-align: center; padding: 0.5rem;">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                      {% if band.band in band_logos %}
+                        <img src="/uploads/band_logos/{{ band_logos[band.band] }}"
+                             alt="{{ band.band }}"
+                             style="max-height: 40px; max-width: 60px; object-fit: contain; border-radius: 4px;">
+                        <button type="button" class="btn-icon" onclick="deleteBandLogo('{{ band.band }}')" title="Logo löschen">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      {% else %}
+                        <button type="button" class="btn-icon" onclick="openLogoUpload('{{ band.band }}')" title="Logo hochladen">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </button>
+                      {% endif %}
+                    </div>
+                    <input type="file" id="logoInput_{{ band.band }}" accept="image/*" style="display: none;" onchange="uploadBandLogo('{{ band.band }}', this)">
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+
+            <div class="button-group">
+              <button type="submit" onclick="submitForm('save')" class="btn btn-primary">Änderungen speichern</button>
+              <button type="submit" onclick="submitForm('delete')" class="btn btn-danger" id="deleteButton" disabled>Ausgewählte löschen</button>
+              {% if is_full_admin %}
+              <button type="submit" onclick="submitForm('reload')" class="btn btn-secondary">CSV neu laden</button>
+              {% endif %}
+            </div>
+          </form>
         </div>
-      </form>
+
+        {% if is_full_admin %}
+        <div class="section">
+          <h2>CSV Verwaltung</h2>
+          <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">
+            Hier kannst du eine CSV-Datei hochladen oder eine Beispiel-CSV herunterladen, die als Vorlage dient.
+          </p>
+
+          <div style="display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; margin-bottom: 1rem;">
+            <!-- CSV Upload -->
+            <div style="background: var(--surface); padding: 1.5rem; border-radius: 0.5rem;">
+              <h3 style="margin-top: 0; font-size: 1.1rem; margin-bottom: 1rem;">CSV hochladen</h3>
+              <form id="uploadCsvForm" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 1rem;">
+                <div class="file-input-wrapper">
+                  <input type="file" name="csv_file" id="csvFileInput" accept=".csv" class="form-control" required>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="display: inline-block; vertical-align: middle; margin-right: 0.5rem;">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  CSV hochladen
+                </button>
+              </form>
+              <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0;">
+                Die CSV wird validiert und bei Konflikten abgelehnt.
+              </p>
+            </div>
+
+            <!-- CSV Download -->
+            <div style="background: var(--surface); padding: 1.5rem; border-radius: 0.5rem;">
+              <h3 style="margin-top: 0; font-size: 1.1rem; margin-bottom: 1rem;">Beispiel-CSV herunterladen</h3>
+              <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+                Lade eine korrekt formatierte Beispiel-CSV herunter, die du als Vorlage verwenden kannst.
+              </p>
+              <a href="/download_example_csv" class="btn btn-secondary" style="width: 100%; text-align: center; display: inline-block; text-decoration: none;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="display: inline-block; vertical-align: middle; margin-right: 0.5rem;">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                </svg>
+                Beispiel herunterladen
+              </a>
+              <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0;">
+                Format: date, band, start, end
+              </p>
+            </div>
+          </div>
+
+          <!-- Upload Status/Meldung -->
+          <div id="uploadStatus" style="display: none; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;"></div>
+        </div>
+        {% endif %}
+
+        <!-- Historie -->
+        <div class="section">
+          <h2 style="display: flex; align-items: center; justify-content: space-between;">
+            <span>Historie</span>
+            <button type="button" class="btn btn-danger" onclick="clearAllHistory()" id="clearAllHistoryBtn" style="font-size: 0.9rem; padding: 0.4rem 0.8rem;">
+              Gesamte Historie leeren
+            </button>
+          </h2>
+
+          <div id="historyContainer">
+            <p style="color: var(--text-muted); text-align: center; padding: 2rem;">
+              Lade Historie...
+            </p>
+          </div>
+        </div>
+
+      </div>
+
     </div>
-    {% endif %}
 
     <!-- Rollen-Modal -->
     <div id="roleModal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center;">
