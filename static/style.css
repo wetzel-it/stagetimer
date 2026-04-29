@@ -137,9 +137,9 @@ body {
 
 /* Admin Panel Styles */
 .admin-container {
-  max-width: 1200px;
-  margin: 2rem auto;
-  padding: 0 1rem;
+  max-width: 100%;
+  margin: 0;
+  padding: 1.5rem;
 }
 
 .header {
