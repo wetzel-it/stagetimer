@@ -247,24 +247,15 @@ def get_band_logos():
 # Config-Funktionen sind nun in get_* Helper-Funktionen integriert
 # Settings werden direkt aus der DB gelesen/geschrieben
 
-DAY_BOUNDARY_HOUR = 2  # Eventtag wechselt um 02:00 Uhr, nicht Mitternacht
-
 def calculate_duration_and_end_date(start_date, start_time, end_time):
     """
     Berechnet Dauer und End-Datum aus Event-Datum, Start-Zeit und End-Zeit.
-    Zeiten vor 02:00 Uhr gehören zum nächsten Kalendertag (Eventtag beginnt um 02:00).
-    Erkennt automatisch, wenn eine Band über Mitternacht spielt.
+    Wenn Endzeit <= Startzeit, spielt die Band über Mitternacht (End-Datum = nächster Tag).
+    Acts die nach Mitternacht beginnen müssen in der CSV mit dem korrekten Kalenderdatum eingetragen werden.
     """
     start_dt = datetime.strptime(f"{start_date} {start_time}", "%Y-%m-%d %H:%M")
     end_dt = datetime.strptime(f"{start_date} {end_time}", "%Y-%m-%d %H:%M")
 
-    # Zeiten vor 02:00 gehören physisch zum nächsten Kalendertag
-    if start_dt.hour < DAY_BOUNDARY_HOUR:
-        start_dt += timedelta(days=1)
-    if end_dt.hour < DAY_BOUNDARY_HOUR:
-        end_dt += timedelta(days=1)
-
-    # Falls Endzeit immer noch vor Startzeit (z.B. 23:00-01:00), nächster Tag
     if end_dt <= start_dt:
         end_dt += timedelta(days=1)
 
@@ -1178,10 +1169,15 @@ def download_example_csv():
     day_after_str = day_after.isoformat()
 
     # Erstelle Beispiel-CSV-Daten (immer ab morgen)
-    example_data = f"""date,band,start,end
+    example_data = f"""# HINWEIS: Acts die um oder nach Mitternacht (00:00-02:00) beginnen, muessen mit dem naechsten Kalenderdatum eingetragen werden!
+# Beispiel: Act startet am {tomorrow_str} um 23:45 und endet um 01:00 → Endzeit gehoert zum {day_after_str}, wird automatisch erkannt.
+# Beispiel: Act startet am {day_after_str} um 00:30 → Datum {day_after_str} eintragen, NICHT {tomorrow_str}!
+date,band,start,end
 {tomorrow_str},Band 1,18:00,19:00
 {tomorrow_str},Band 2,19:30,21:00
-{tomorrow_str},Band 3,21:30,23:00
+{tomorrow_str},Band 3,21:30,23:30
+{tomorrow_str},Midnight Act (endet nach Mitternacht),23:45,01:00
+{day_after_str},After Midnight Act (beginnt nach Mitternacht),00:30,02:00
 {day_after_str},Band 4,14:00,15:30
 {day_after_str},Band 5,16:00,17:30"""
 
@@ -1220,7 +1216,7 @@ def upload_csv():
         raw = file.read()
         for encoding in ('utf-8-sig', 'utf-8', 'latin-1', 'cp1252'):
             try:
-                df = pd.read_csv(io.BytesIO(raw), encoding=encoding)
+                df = pd.read_csv(io.BytesIO(raw), encoding=encoding, comment='#')
                 break
             except UnicodeDecodeError:
                 continue

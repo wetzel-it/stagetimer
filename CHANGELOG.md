@@ -4,8 +4,12 @@ Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert
 
 ## [2.3.6] - 2026-04-29
 
+### Geändert
+- **Mitternacht-Logik vereinfacht**: Automatische DAY_BOUNDARY-Verschiebung entfernt — verursachte falsche Konflikterkennung bei Mehrtages-Festivals. Acts die nach Mitternacht beginnen müssen mit dem korrekten Kalenderdatum in der CSV eingetragen werden
+- **Beispiel-CSV**: Enthält jetzt Kommentarzeilen (`#`) mit Hinweis für After-Midnight-Acts sowie Beispiel-Einträge die Mitternacht-Slots demonstrieren
+- **CSV-Upload**: Kommentarzeilen (beginnend mit `#`) werden beim Import übersprungen
+
 ### Behoben
-- **Falsche Konflikterkennung bei Mehrtages-Festivals**: Zeiten zwischen 00:00 und 02:00 Uhr werden jetzt korrekt als nächsten Kalendertag behandelt — konsistent mit der bestehenden "Eventtag beginnt um 02:00"-Logik
 - **Admin Display Vorschau**: "Feierabend"/"Danke an alle Beteiligten!" war im Admin-Panel noch hart kodiert — zeigt jetzt die konfigurierten Abschluss-Texte aus den Einstellungen
 - **Benutzerverwaltung HTML**: Überschüssiges `</div>` in der Benutzerliste entfernt
 
