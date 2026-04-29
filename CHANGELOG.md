@@ -2,6 +2,13 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [2.3.6] - 2026-04-29
+
+### Behoben
+- **Falsche Konflikterkennung bei Mehrtages-Festivals**: Zeiten zwischen 00:00 und 02:00 Uhr werden jetzt korrekt als nächsten Kalendertag behandelt — konsistent mit der bestehenden "Eventtag beginnt um 02:00"-Logik
+- **Admin Display Vorschau**: "Feierabend"/"Danke an alle Beteiligten!" war im Admin-Panel noch hart kodiert — zeigt jetzt die konfigurierten Abschluss-Texte aus den Einstellungen
+- **Benutzerverwaltung HTML**: Überschüssiges `</div>` in der Benutzerliste entfernt
+
 ## [2.3.5] - 2026-04-29
 
 ### Behoben

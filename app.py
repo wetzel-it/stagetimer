@@ -247,34 +247,29 @@ def get_band_logos():
 # Config-Funktionen sind nun in get_* Helper-Funktionen integriert
 # Settings werden direkt aus der DB gelesen/geschrieben
 
+DAY_BOUNDARY_HOUR = 2  # Eventtag wechselt um 02:00 Uhr, nicht Mitternacht
+
 def calculate_duration_and_end_date(start_date, start_time, end_time):
     """
-    Berechnet Dauer und End-Datum aus Start-Datum, Start-Zeit und End-Zeit.
-    Erkennt automatisch, wenn die Band über Mitternacht spielt.
-
-    Args:
-        start_date: Start-Datum als String (YYYY-MM-DD)
-        start_time: Start-Zeit als String (HH:MM)
-        end_time: End-Zeit als String (HH:MM)
-
-    Returns:
-        tuple: (duration_minutes, end_date_string)
+    Berechnet Dauer und End-Datum aus Event-Datum, Start-Zeit und End-Zeit.
+    Zeiten vor 02:00 Uhr gehören zum nächsten Kalendertag (Eventtag beginnt um 02:00).
+    Erkennt automatisch, wenn eine Band über Mitternacht spielt.
     """
-    # Parse Start-Datum und -Zeit
-    start_datetime = datetime.strptime(f"{start_date} {start_time}", "%Y-%m-%d %H:%M")
+    start_dt = datetime.strptime(f"{start_date} {start_time}", "%Y-%m-%d %H:%M")
+    end_dt = datetime.strptime(f"{start_date} {end_time}", "%Y-%m-%d %H:%M")
 
-    # Parse End-Zeit (zunächst am gleichen Tag)
-    end_datetime = datetime.strptime(f"{start_date} {end_time}", "%Y-%m-%d %H:%M")
+    # Zeiten vor 02:00 gehören physisch zum nächsten Kalendertag
+    if start_dt.hour < DAY_BOUNDARY_HOUR:
+        start_dt += timedelta(days=1)
+    if end_dt.hour < DAY_BOUNDARY_HOUR:
+        end_dt += timedelta(days=1)
 
-    # Wenn Endzeit <= Startzeit, dann ist es am nächsten Tag
-    if end_datetime <= start_datetime:
-        end_datetime += timedelta(days=1)
+    # Falls Endzeit immer noch vor Startzeit (z.B. 23:00-01:00), nächster Tag
+    if end_dt <= start_dt:
+        end_dt += timedelta(days=1)
 
-    # Berechne Dauer in Minuten
-    duration_minutes = int((end_datetime - start_datetime).total_seconds() / 60)
-
-    # End-Datum als String
-    end_date = end_datetime.date().isoformat()
+    duration_minutes = int((end_dt - start_dt).total_seconds() / 60)
+    end_date = end_dt.date().isoformat()
 
     return duration_minutes, end_date
 

@@ -71,9 +71,9 @@
         'preview-warning-red'
       );
 
-      // Setze zuerst die Standardwerte für "Feierabend"
-      previewBandName.textContent = 'Feierabend';
-      previewTime.textContent = 'Danke an alle Beteiligten!';
+      // Setze zuerst die Standardwerte für Abschluss-Anzeige
+      previewBandName.textContent = '{{ end_title }}';
+      previewTime.textContent = '{{ end_message }}';
       previewProgress.style.width = '0%';
       console.log('Standardwerte gesetzt');
 
@@ -115,7 +115,7 @@
         // Verstecke Quick-Adjust Buttons wenn keine Band spielt
         quickAdjustContainer.style.display = 'none';
       } else {
-        console.log('Status:', data.status, '- zeige Feierabend');
+        console.log('Status:', data.status, '- zeige Abschluss-Anzeige');
 
         // Verstecke Quick-Adjust Buttons wenn keine Band spielt
         quickAdjustContainer.style.display = 'none';
@@ -1152,7 +1152,6 @@
                   <button type="submit" class="delete-user" title="Nutzer löschen" onclick="return confirm('Benutzer {{ user.username }} wirklich löschen?')">x</button>
                   </form>
                 {% endif %}
-              </div>
             </div>
           </li>
         {% endfor %}
