@@ -2,6 +2,12 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [2.3.7] - 2026-04-29
+
+### Geändert
+- **Admin-Panel Layout**: Zweispaltige Ansicht — links Vorschau/Einstellungen, rechts Zeitplan/Historie
+- **Admin-Container**: Volle Bildschirmbreite statt max. 1200px
+
 ## [2.3.6] - 2026-04-29
 
 ### Geändert
